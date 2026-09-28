@@ -18,6 +18,12 @@ Two tools, two directions:
 | **cljgen** | Python 3 | DATA → `.clj` (emit)             | Create a new file from scratch       |
 | **sexpsplice** | Clojure | `.clj` → edit → `.clj` (splice) | Edit one form in an existing file    |
 
+## Status
+
+Production-usable. Both tools ship with formal specs (`SPEC.md`) and acceptance
+tests that pass against the real Clojure toolchain (`clj-kondo` + `sexpsplice`),
+not just self-consistency checks.
+
 They are complementary: **cljgen** builds new files from typed data; **sexpsplice**
 surgically edits existing files while preserving comments, reader macros, and
 formatting. Use cljgen to generate, sexpsplice to modify.
@@ -74,6 +80,13 @@ clj-kondo --lint <file>     # real Clojure reader/linter
 sexpsplice list <file>      # real reader, form count
 ```
 
+## Dependencies & licenses
+
+- **cljgen** — Python 3 standard library only, no dependencies. MIT.
+- **sexpsplice** — depends on [rewrite-clj](https://github.com/clj-commons/rewrite-clj)
+  (EPL-1.0), fetched from Clojars at runtime. The tool itself is MIT; EPL-1.0 is
+  a weak copyleft license that is compatible with an MIT-licensed project.
+
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
