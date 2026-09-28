@@ -1,24 +1,31 @@
 ---
 name: clojure-structural-editing
-description: "Edit Clojure/EDN structurally by form index via sexpsplice."
-version: 1.0.0
+description: "Use when authoring or editing Clojure/EDN (.clj/.cljs) code. Create files with cljgen (data to .clj) or the sexpsplice append loop; edit by form index via sexpsplice. Never hand-edit with sed/python/pr-str."
+version: 1.1.0
 author: Richard Kimble
 license: MIT
 metadata:
   hermes:
-    tags: [Clojure, EDN, Rewriting, Structure, sexpsplice]
+    tags: [Clojure, EDN, clj, cljs, coding, authoring, writing, structural-editing, sexpsplice, cljgen, rewrite-clj]
     category: software-development
 ---
 
-# Clojure Structural Editing (sexpsplice + rewrite-clj)
+# Clojure Coding & Structural Editing (cljgen + sexpsplice)
 
-Edit `.clj`/`.edn` files **structurally**, not textually. An LLM (or human) names a form by index and supplies one replacement form; the tool parses it with a real reader and splices it in, leaving every other form **byte-for-byte unchanged** — comments, reader macros (`#()`, `#{}`), and formatting all survive.
+Author and edit `.clj`/`.edn` files **structurally**, never textually. Two tools:
+
+- **Author** (build a file): `cljgen` (Python, data → `.clj`) or the `sexpsplice append` loop — add one form at a time.
+- **Edit** (change an existing file): `sexpsplice` by form index — name a form, supply one replacement, everything else is preserved **byte-for-byte** (comments, reader macros `#()`/`#{}`, formatting all survive).
+
+Never hand-edit Clojure with sed, python string munging, or `pr-str` — those corrupt delimiters, expand reader macros into `(fn* ...)`, and drop comments.
 
 ## When to Use
 
-- An LLM needs to change one form in a Clojure file without retyping the whole file (which corrupts delimiters/formatting).
+- **Authoring**: an LLM (or human) needs to *create* a Clojure file from scratch — use cljgen, or the `sexpsplice append` loop (one form at a time, review each).
+- **Editing**: an LLM needs to change one form in an existing Clojure file without retyping the whole file (which corrupts delimiters/formatting).
 - You want delimiters guaranteed balanced by construction (the parser emits them).
 - You need comment/reader-macro preservation — where `pr-str` re-serialization fails.
+- You find yourself about to use sed/python/pr-str on a `.clj` file — stop, and use this instead.
 
 ## Authoring workflow — build a file incrementally (append → review)
 
