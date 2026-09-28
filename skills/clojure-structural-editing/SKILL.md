@@ -20,6 +20,24 @@ Edit `.clj`/`.edn` files **structurally**, not textually. An LLM (or human) name
 - You want delimiters guaranteed balanced by construction (the parser emits them).
 - You need comment/reader-macro preservation — where `pr-str` re-serialization fails.
 
+## Authoring workflow — build a file incrementally (append → review)
+
+The canonical way to author a `.clj` file from scratch, ONE form at a time.
+Never batch many forms at once, and never hand-edit with sed/python/pr-str.
+
+1. Start empty:  `: > demo.clj`
+2. Add ONE expression:  `echo '(ns demo.core)' | sexpsplice append demo.clj`
+3. Write + review:  `sexpsplice list demo.clj && clj-kondo --lint demo.clj`
+4. Repeat: add one more form, review, add one more, review …
+
+Every `append` is parsed by a real Clojure reader (delimiters balanced by
+construction), writes atomically, and leaves `<file>.bak`. Reviewing after
+EACH form means a malformed form is caught immediately while the file is
+still small, and the fix is a single `sexpsplice delete <file> <idx>`.
+
+To CHANGE an existing form (not add), use `set`/`delete`/`move`/`insert` by
+index — locate a form with `sexpsplice find <file> <substring>`.
+
 ## The tool
 
 - **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/projects/clojure-llm-tools/` (contains both tools + docs + this skill).
