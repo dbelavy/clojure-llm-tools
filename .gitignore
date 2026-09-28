@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.cpcache/
+.clj-kondo/
+.lsp/
+.nrepl-port
+*.bak

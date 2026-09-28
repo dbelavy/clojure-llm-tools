@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# sexpsplice - positional S-expression editor for .clj/.edn files.
+# Launcher: uses plain clojure + rewrite-clj (guarantees a real reader and
+# byte-for-byte preservation of untouched forms). babashka is NOT used because
+# its SCI preprocessor breaks the native reader idioms on some hosts.
+set -euo pipefail
+
+PROJ="${SEXPSPLICE_HOME:-$HOME/projects/sexpsplice}"
+
+exec clojure -Srepro -Sdeps '{:deps {rewrite-clj/rewrite-clj {:mvn/version "1.2.57"}} :mvn/repos {"clojars" {:url "https://repo.clojars.org/"}}}' \
+  -M "$PROJ/sexpsplice.clj" "$@"
