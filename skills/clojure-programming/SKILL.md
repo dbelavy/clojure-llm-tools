@@ -78,8 +78,8 @@ the rule above); do NOT keep patching.
 
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/projects/clojure-llm-tools/` (contains both tools + docs + this skill).
-- **`cljgen`** — the emit-side companion (Python): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/projects/clojure-llm-tools/cljgen/`.
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/repos/clojure-llm-tools/` (contains both tools + docs + this skill).
+- **`cljgen`** — the emit-side companion (Python): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/repos/clojure-llm-tools/cljgen/`.
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
 ### Commands
