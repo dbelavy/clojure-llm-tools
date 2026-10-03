@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.3.0
+version: 1.3.1
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -78,7 +78,7 @@ the rule above); do NOT keep patching.
 
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/repos/clojure-llm-tools/` (contains both tools + docs + this skill).
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/repos/clojure-llm-tools/sexpsplice/sexpsplice.clj` (plus `deps.edn`; installed working copy `~/projects/sexpsplice/`, kept in sync). Canonical repo: `~/repos/clojure-llm-tools/` (contains both tools + docs + this skill).
 - **`cljgen`** — the emit-side companion (Python): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/repos/clojure-llm-tools/cljgen/`.
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
@@ -107,7 +107,7 @@ Examples: `[2]` = top-level form 2; `[1 3]` = form 1's 3rd child (a defn body); 
 
 Full CRUD + batch + discover/reorder: create (append/insert), read (list + get + find), update (set), delete (delete), transactional multi-edit (apply), reorder (move).
 
-**The spec** lives at `~/projects/sexpsplice/SPEC.md` (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
+**The spec** lives at `~/repos/clojure-llm-tools/sexpsplice/SPEC.md` (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
 
 stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, `index <i> out of range 0-<N-1>`, or `cannot parse file <file>` (the last one = the file is broken: revert or rewrite, don't patch).
 
@@ -138,6 +138,6 @@ stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, 
 
 ## Setup notes
 
-- Project: `~/projects/sexpsplice/` with `deps.edn` (`:aliases {:run {:main-opts ["sexpsplice.clj"]}}`).
+- Project: canonical `~/repos/clojure-llm-tools/sexpsplice/` with `deps.edn`; installed working copy `~/projects/sexpsplice/` (what `~/bin/sexpsplice` runs by default).
 - Launcher `~/bin/sexpsplice` runs `clojure -Srepro -Sdeps '<deps>' -M sexpsplice.clj "$@"`; `SEXPSPLICE_HOME` overrides the project dir.
 - clj-kondo install: `curl -sL https://github.com/clj-kondo/clj-kondo/releases/download/v<VER>/clj-kondo-<VER>-linux-amd64.zip` (asset name has NO `v` prefix — `clj-kondo-2026.08.04-linux-amd64.zip`, not `.../latest/download/...`).
