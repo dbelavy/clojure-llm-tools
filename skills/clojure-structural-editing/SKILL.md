@@ -1,7 +1,7 @@
 ---
 name: clojure-structural-editing
 description: "Use when authoring or editing Clojure/EDN (.clj/.cljs) code. Create files with cljgen (data to .clj) or the sexpsplice append loop; edit by form index via sexpsplice. Never hand-edit with sed/python/pr-str."
-version: 1.1.0
+version: 1.2.0
 author: Richard Kimble
 license: MIT
 metadata:
@@ -49,6 +49,12 @@ index — locate a form with `sexpsplice find <file> <substring>`.
 
 - **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/projects/clojure-llm-tools/` (contains both tools + docs + this skill).
 - **`cljgen`** — the emit-side companion (Python): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/projects/clojure-llm-tools/cljgen/`.
+
+**cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:
+
+- **Binding/arg vectors are ONE flat `tuple`, not a list of pairs.** `(let [a 1 b 2] ...)` is written `[Sym("let"), (Sym("a"), 1, Sym("b"), 2), <body>]` — a single tuple of alternating name/value, NOT `[(Sym("a"), 1), (Sym("b"), 2)]` (that would emit a vector of two nested vectors). Same for a `defn` arg vector: `(Sym("n"),)`.
+- **`(atom nil)` is a LIST call**, not a special form — write `[Sym("atom"), None]`, which emits `(atom nil)` (a form), correctly distinct from `[ ... ]`.
+- **A form's head is a `Sym`, its body is a `list`.** `(def square ...)` → `[Sym("def"), Sym("square"), ...]`. Getting the head/body nesting right is the whole game; clj-kondo localises each inversion cheaply, but a worked example (see `cljgen/cljgen.py` docstring `USAGE`, lines 45–59) saves re-deriving it.
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
 ### Commands
@@ -66,6 +72,10 @@ sexpsplice insert <file> <idx>         insert ONE form from stdin at index IDX
 ```
 
 Flags (anywhere): `--dry-run`/`-n` prints the would-be result without writing; `--no-backup` skips the `.bak` backup.
+
+**Two `move`/`insert` behaviours to know before you use them:**
+- **`move` canonicalises inter-form separators.** It collapses blank lines *between* top-level forms to single newlines (the block model drops whitespace and re-emits with `n/newlines 1` separators). A form's *own* internal content — including blank lines inside it — is preserved byte-for-byte. So `(def b\n\n  2)` keeps its internal blank line, but the gap between `(def a 1)` and `(def b ...)` does not survive a `move`. If you need whitespace exactly preserved, use `set` (which is byte-preserving), not `move`.
+- **`insert` at the same index stacks in REVERSE.** Each `insert` places its form *at* index N and pushes existing forms down, so three `insert idx 0` calls land as C, B, A (reverse of insertion order). To insert several forms in forward order at the front, insert them in reverse, or `append` then `move` (chained moves fix ordering).
 
 **Path syntax** = vector of selectors, each descending one level:
 - integer → Nth value child (0-based, whitespace/comments skipped)
