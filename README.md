@@ -28,9 +28,15 @@ They are complementary: **cljgen** builds new files from typed data; **sexpsplic
 surgically edits existing files while preserving comments, reader macros, and
 formatting. Use cljgen to generate, sexpsplice to modify.
 
+Research notes: [`docs/best-practices-llm-coding.md`](docs/best-practices-llm-coding.md)
+— current best practice for LLM coding (context management, verification,
+structural tooling), with a mapping to cljgen/sexpsplice.
+
 ```
 clojure-llm-tools/
 ├── README.md            # this file
+├── docs/
+│   └── best-practices-llm-coding.md   # LLM coding best practices + mapping to these tools
 ├── INSTALL.md           # install both tools (Clojure CLI, clj-kondo, launchers)
 ├── cljgen/              # Python emitter: DATA -> .clj
 │   ├── cljgen.py        #   the module (stdlib only, no deps)
