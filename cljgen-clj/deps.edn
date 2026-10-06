@@ -1,0 +1,2 @@
+{:paths ["."]
+ :aliases {:cli {:main-ns cljgen.cli}}}
