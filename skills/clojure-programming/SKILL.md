@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.7.0
+version: 1.8.0
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -31,6 +31,10 @@ What still works, by design: everything `sexpsplice` (`list`/`get`/`set`/`append
 A second hook, **`pre_verify`**, fires once when a turn changed a `.clj` file and will not let you finish without the verification checklist: `clj-kondo --lint` + `sexpsplice list` + `wc -l` (≤ 50) + a real `~/.local/bin/clojure -M -e "(require '<ns>)"`.
 
 Source, tests, installer: `agent-hooks/` inside the repo (resolve the root with `clj-repo-root`) — `python3 agent-hooks/test_clj_guard.py` (52 cases + wire protocol).
+
+## The machine IS the oracle — never hand-write reference code (standing, David 2026-10-08)
+
+When delegating Clojure authoring to another agent (e.g. Pi): hand it a **prose spec** (target file, behaviour, exact acceptance) — NO reference code to transcribe, NO "byte-exact oracle" file. The compiler, kondo, the test suite, and curl against the live target ARE the oracle; a hand-written reference `.clj` is not a shortcut, it is a second source of bugs (the 2026-10-08 KAF healthz thread: every defect was in the hand-authored reference; the delegated agent's output was flawless and it caught the reference's bugs). The real reader (LOAD/REFUSE) is also the arbiter of balance — never a string counter.
 
 ## When to Use
 
