@@ -62,7 +62,10 @@ clojure-llm-tools/
         └── SKILL.md     # Hermes agent skill (install into ~/.hermes/skills/)
 ```
 
-## Repository & remotes (read this before "fixing" a path)
+## Repository layout & remotes (read this before "fixing" a path)
+
+**Syncthing is canonical for all repositories and projects.** The shared folder is flat:
+`repos/` (git repositories) and `projects/` (non-repo projects), alongside `backups/`.
 
 **Canonical remote: `github-rk:dbelavy/clojure-llm-tools.git` (GitHub). It is the only source of truth.**
 
@@ -71,19 +74,24 @@ them. Hardcoding one has already broken the skill twice — once naming `~/repos
 `~/projects/…`, each dead on the other host. **Resolve the path; don't assume it:**
 
 ```bash
-REPO="$(clj-repo-root)"   # -> the checkout root, or exit 1 with a clear message
+REPO="$(clj-repo-root)"    # this repo
+ROOT="$(repos-root)"       # canonical repos root — every repository lives here
+PROJ="$(projects-root)"    # canonical projects root
+repo-root <name>           # any repo by name, e.g. repo-root postbox
+repo-root --list           # show what resolved, for debugging
 ```
 
-`scripts/repo-root` is the single implementation (installed on PATH as `clj-repo-root`, and it
-honours `CLJ_TOOLS_ROOT` for unusual layouts). Add a candidate path *there* if a new host needs
-one — never as a literal home path in the skill's prose.
+`scripts/repo-root` is the single implementation; `clj-repo-root`, `repos-root` and
+`projects-root` are thin wrappers over it. It locates the shared folder by **discovery** — a
+Syncthing root is any directory containing a `.stfolder` marker — so it survives that folder
+being moved or renamed, and no host layout is baked in. Overrides for other hosts:
+`$REPOS_ROOT`, `$PROJECTS_ROOT`, and legacy `$CLJ_TOOLS_ROOT`. It never guesses: a wrong path
+is worse than a clear failure, because an agent will happily use it.
 
 **Never fetch, pull, or push the retired Bitbucket mirror**
 (`bitbucket-rk:richardkimble/clojure-llm-tools.git`). Its `main` is `b4967a2` ("Initial commit"),
 a **parentless root commit that deletes the entire project** (14 files, ~1390 lines) and shares no
-history with the real repo — a pull from it would wipe the working tree. Its last surviving clone
-is the stale shadow `~/Sync/shared/outbox/repos/clojure-llm-tools` (3 ancient commits, no
-`agent-hooks/`, no `docs/`). That directory is not the repo.
+history with the real repo — a pull from it would wipe the working tree.
 
 ## Quick start
 

@@ -1,59 +1,114 @@
 #!/usr/bin/env bash
-# repo-root — print the absolute path of the clojure-llm-tools checkout.
+# repo-root — resolve repository and project locations without hardcoding a host layout.
 #
 # WHY THIS EXISTS
-#   Two agents share this repo from different hosts, and each hardcoded its own
-#   local path into the skill. Every "fix" to ~/repos vs ~/projects broke the other
-#   host, and the skill ended up pointing at a path that did not resolve on the very
-#   machine it was installed on. Prose paths drift; this does not. The skill now says
-#   "run repo-root" instead of naming a directory, so neither layout can win or lose.
+#   Two agents share these repos from different hosts, and each hardcoded its own
+#   local path into the shared skill. Every "fix" to ~/repos vs ~/projects broke the
+#   other host, and the skill ended up pointing at a path that did not resolve on the
+#   very machine it was installed on. Worse, a stale checkout of the same repo was
+#   sitting in a synced folder with a different git remote, so "the path" was never
+#   the real question — which copy is canonical, was.
 #
-# Resolution order (first hit wins):
-#   1. $CLJ_TOOLS_ROOT                explicit override, for tests and unusual layouts
-#   2. the git toplevel of the cwd    if you are already inside the repo
-#   3. well-known checkout locations  per-host layouts, most specific first
-#   4. the git toplevel of $PWD/..    catch-all for a nested caller
+# THE RULE NOW
+#   The Syncthing "shared" folder is canonical for all repositories and projects.
+#   This script finds it by discovery, not by assuming a path:
+#   a Syncthing folder root is any directory containing a `.stfolder` marker.
+#   Canonical subdirectories are `repos/` (git repositories) and `projects/` (non-repo
+#   projects, e.g. cljgen, sexpsplice).
 #
-# Exit 0 and print the root, or exit 1 with a diagnostic on stderr. Never guesses:
+# USAGE
+#   repo-root                 # path to the clojure-llm-tools repo
+#   repo-root <name>          # path to any repo under the canonical repos root
+#   repo-root --repos-root    # the canonical repos root itself
+#   repo-root --projects-root # the canonical projects root itself
+#   repo-root --list          # show every candidate root and whether it resolves
+#
+# OVERRIDES (for tests, unusual layouts, other hosts)
+#   $REPOS_ROOT, $PROJECTS_ROOT, $CLJ_TOOLS_ROOT (legacy, clojure-llm-tools only)
+#
+# Exit 0 and print the path, or exit 1 with a diagnostic on stderr. It never guesses:
 # a wrong path is worse than a clear failure, because an agent will happily use it.
 set -euo pipefail
 
-# 1. explicit override
-if [ -n "${CLJ_TOOLS_ROOT:-}" ] && [ -d "$CLJ_TOOLS_ROOT/sexpsplice" ]; then
-  printf '%s\n' "$(cd "$CLJ_TOOLS_ROOT" && pwd)"
-  exit 0
+DEFAULT_REPO="clojure-llm-tools"
+
+# --- discovery -----------------------------------------------------------------
+# Any directory holding a Syncthing `.stfolder` marker is a synced-folder root.
+# Bounded depth keeps this fast; it is a convention marker, not a host path.
+discover_sync_roots() {
+  find "$HOME" -maxdepth 4 -name .stfolder -printf '%h\n' 2>/dev/null || true
+}
+
+# Sanity check: a usable canonical dir must exist and be a directory.
+usable() { [ -n "${1:-}" ] && [ -d "$1" ]; }
+
+# Resolve the canonical repos root.
+repos_root() {
+  if usable "${REPOS_ROOT:-}"; then printf '%s\n' "$(cd "$REPOS_ROOT" && pwd -P)"; return 0; fi
+
+  local r
+  while IFS= read -r r; do
+    if usable "$r/repos"; then printf '%s\n' "$(cd "$r/repos" && pwd -P)"; return 0; fi
+  done < <(discover_sync_roots)
+
+  # Legacy fallbacks so the resolver still works on a host that has not migrated yet.
+  for r in "$HOME/repos" "$HOME/Shared/repos"; do
+    if usable "$r"; then printf '%s\n' "$(cd "$r" && pwd -P)"; return 0; fi
+  done
+  return 1
+}
+
+# Resolve the canonical projects root.
+projects_root() {
+  if usable "${PROJECTS_ROOT:-}"; then printf '%s\n' "$(cd "$PROJECTS_ROOT" && pwd -P)"; return 0; fi
+
+  local r
+  while IFS= read -r r; do
+    if usable "$r/projects"; then printf '%s\n' "$(cd "$r/projects" && pwd -P)"; return 0; fi
+  done < <(discover_sync_roots)
+
+  for r in "$HOME/projects"; do
+    if usable "$r"; then printf '%s\n' "$(cd "$r" && pwd -P)"; return 0; fi
+  done
+  return 1
+}
+
+# --- dispatch ------------------------------------------------------------------
+case "${1:-}" in
+  --repos-root)
+    repos_root || { echo "repo-root: no canonical repos root found." >&2; exit 1; }
+    exit 0 ;;
+  --projects-root)
+    projects_root || { echo "repo-root: no canonical projects root found." >&2; exit 1; }
+    exit 0 ;;
+  --list)
+    echo "discovered sync roots (dirs containing .stfolder):"
+    discover_sync_roots | sed 's/^/  /' || true
+    echo "repos root:    $(repos_root 2>/dev/null || echo '<unresolved>')"
+    echo "projects root: $(projects_root 2>/dev/null || echo '<unresolved>')"
+    exit 0 ;;
+  ""|--repo)
+    NAME="$DEFAULT_REPO" ;;
+  *)
+    NAME="$1" ;;
+esac
+
+# Legacy override: an explicit checkout of clojure-llm-tools, for tests and odd layouts.
+if [ "$NAME" = "$DEFAULT_REPO" ] && usable "${CLJ_TOOLS_ROOT:-}"; then
+  printf '%s\n' "$(cd "$CLJ_TOOLS_ROOT" && pwd -P)"; exit 0
 fi
 
-# 2. already inside the repo? git is the authority on the top level.
-if root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -d "$root/sexpsplice" ]; then
-  printf '%s\n' "$root"
-  exit 0
+# Already inside the target repo? git is the authority on the top level.
+if root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ "$(basename "$root")" = "$NAME" ]; then
+  printf '%s\n' "$(cd "$root" && pwd -P)"; exit 0
 fi
 
-# 3. well-known locations. Both ~/projects and ~/repos appear in the wild because
-#    the two hosts disagree; accept either rather than declaring a winner.
-for candidate in \
-  "$HOME/projects/clojure-llm-tools" \
-  "$HOME/repos/clojure-llm-tools" \
-  "$HOME/Shared/repos/clojure-llm-tools" \
-  "$HOME/src/clojure-llm-tools" \
-  "$HOME/code/clojure-llm-tools" \
-  "$HOME/dev/clojure-llm-tools" \
-  "$HOME/Development/clojure-llm-tools"; do
-  if [ -d "$candidate/sexpsplice" ]; then
-    # Resolve symlinks so callers get a real path, not another indirection to chase.
-    printf '%s\n' "$(cd "$candidate" && pwd -P)"
-    exit 0
-  fi
-done
-
-# 4. last resort: one level up from the caller's cwd (e.g. called from a subdir).
-if root="$(git -C "$PWD/.." rev-parse --show-toplevel 2>/dev/null)" && [ -d "$root/sexpsplice" ]; then
-  printf '%s\n' "$root"
-  exit 0
+if R="$(repos_root)"; then
+  if usable "$R/$NAME"; then printf '%s\n' "$(cd "$R/$NAME" && pwd -P)"; exit 0; fi
 fi
 
-echo "repo-root: clojure-llm-tools checkout not found." >&2
-echo "  Set CLJ_TOOLS_ROOT=/path/to/clojure-llm-tools, or clone it" >&2
-echo "  (git remote: github-rk:dbelavy/clojure-llm-tools.git) and re-run." >&2
+echo "repo-root: '$NAME' not found in the canonical repos root." >&2
+echo "  Tried: ${REPOS_ROOT:-<discovered sync root>/repos}" >&2
+echo "  Run 'repo-root --list' to see what resolved." >&2
+echo "  Override with REPOS_ROOT=/path/to/repos if this host differs." >&2
 exit 1

@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.6.0
+version: 1.7.0
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -88,36 +88,43 @@ closers, escape drift). After any such write on a .clj file: clj-kondo
 IMMEDIATELY — and if it fails, treat the file as broken (revert/rewrite per
 the rule above); do NOT keep patching.
 
-## Locating the repo (resolve it — never hardcode a home path)
+## Locating code (resolve it — never hardcode a home path)
 
-**The git remote is the only source of truth: `github-rk:dbelavy/clojure-llm-tools.git` (GitHub).**
-Checkout paths differ per host, and hardcoding one has broken this skill twice — once naming
-`~/repos/...`, once `~/projects/...`, each dead on the other host. So resolve it:
+**Syncthing is canonical for all repositories and projects.** The shared folder holds
+`repos/` (git repositories) and `projects/` (non-repo projects such as `cljgen`,
+`sexpsplice`), flat at its root alongside `backups/`. Find it by **discovery**, not by
+assuming a path — a Syncthing folder root is any directory containing a `.stfolder` marker:
 
 ```bash
-REPO="$(clj-repo-root)"     # prints the checkout root, or exits 1 with a clear message
+REPO="$(clj-repo-root)"      # the clojure-llm-tools checkout
+ROOT="$(repos-root)"         # canonical repos root — every repository lives here
+PROJ="$(projects-root)"      # canonical projects root
+repo-root postbox            # any repo by name, e.g. <repos-root>/postbox
+repo-root --list             # show what resolved, for debugging
 ```
 
-`repo-root` ships at `scripts/repo-root` (installed on PATH as `clj-repo-root`; honours
-`CLJ_TOOLS_ROOT=...` for unusual layouts). On David's host it resolves to
-`~/projects/clojure-llm-tools`. Use `"$REPO/..."` in commands instead of a literal home path.
+`repo-root` ships at `scripts/repo-root` (installed on PATH alongside `clj-repo-root`,
+`repos-root` and `projects-root`). Overrides for other hosts: `$REPOS_ROOT`,
+`$PROJECTS_ROOT`, and legacy `$CLJ_TOOLS_ROOT`. It **never guesses** — a wrong path is worse
+than a clear failure, because an agent will cheerfully use it.
 
-**Paths that do NOT exist on David's host — do not chase them:** `~/repos/clojure-llm-tools`
-and `~/Shared/repos/clojure-llm-tools` (`~/Shared/` does not exist there at all).
+**The git remote is the source of truth for any repo, not the directory it sits in.**
+For this one: `github-rk:dbelavy/clojure-llm-tools.git`.
 
 **Retired mirror — never fetch, pull, or push it.** The old
 `bitbucket-rk:richardkimble/clojure-llm-tools.git` mirror's `main` is `b4967a2` ("Initial
 commit") — a **parentless root commit that deletes the entire project** (14 files, ~1390 lines
 removed). It shares *no* history with the real repo, so a pull from it would wipe the working
-tree. Its only surviving clone is the stale shadow at
-`~/Sync/shared/outbox/repos/clojure-llm-tools` (3 ancient commits, Bitbucket remote, no
-`agent-hooks/`, no `docs/`). That directory is **not** the repo — ignore it, and never edit
-Clojure tooling there.
+tree. A clone of it was the "second checkout" that caused the path churn; it has been
+repointed at GitHub.
+
+Use `"$REPO/..."` / `"$(repos-root)/<name>"` in commands rather than any literal home path.
 
 ## The tool
 
 - **`sexpsplice`** — launcher at `~/bin/sexpsplice`; source `sexpsplice/` inside the repo
-  (resolve the root as above). The live working copy it runs by default is `~/projects/sexpsplice/`.
+  (resolve the root as above). The launcher discovers its project directory the same way
+  (`$SEXPSPLICE_HOME` overrides), so it follows the repo if the layout moves.
 - **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
 
 **cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:

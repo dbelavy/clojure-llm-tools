@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# clj-repo-root — back-compat entry point for the clojure-llm-tools checkout.
+# All resolution logic lives in `repo-root` next to this file.
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+if [ "$#" -eq 0 ]; then
+  exec "$DIR/repo-root" clojure-llm-tools
+fi
+exec "$DIR/repo-root" "$@"

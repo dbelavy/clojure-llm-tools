@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# repos-root — print the canonical repositories root (Syncthing, discovered not assumed).
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+exec "$DIR/repo-root" --repos-root

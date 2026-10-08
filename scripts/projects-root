@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# projects-root — print the canonical projects root (Syncthing, discovered not assumed).
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+exec "$DIR/repo-root" --projects-root
