@@ -30,7 +30,7 @@ What still works, by design: everything `sexpsplice` (`list`/`get`/`set`/`append
 
 A second hook, **`pre_verify`**, fires once when a turn changed a `.clj` file and will not let you finish without the verification checklist: `clj-kondo --lint` + `sexpsplice list` + `wc -l` (≤ 50) + a real `~/.local/bin/clojure -M -e "(require '<ns>)"`.
 
-Source, tests, installer: `~/projects/clojure-llm-tools/agent-hooks/` — `python3 agent-hooks/test_clj_guard.py` (52 cases + wire protocol).
+Source, tests, installer: `agent-hooks/` inside the repo (resolve the root with `clj-repo-root`) — `python3 agent-hooks/test_clj_guard.py` (52 cases + wire protocol).
 
 ## When to Use
 
@@ -164,7 +164,7 @@ Examples: `[2]` = top-level form 2; `[1 3]` = form 1's 3rd child (a defn body); 
 
 Full CRUD + batch + discover/reorder: create (append/insert), read (list + get + find), update (set), delete (delete), transactional multi-edit (apply), reorder (move).
 
-**The spec** lives at `<repo>/sexpsplice/SPEC.md` (David's host: `~/projects/clojure-llm-tools/sexpsplice/SPEC.md`; the live working copy is `~/projects/sexpsplice/SPEC.md`) (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
+**The spec** lives at `<repo>/sexpsplice/SPEC.md` (resolve `<repo>` with `clj-repo-root`) (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
 
 stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, `index <i> out of range 0-<N-1>`, or `cannot parse file <file>` (the last one = the file is broken: revert or rewrite, don't patch).
 
@@ -195,6 +195,6 @@ stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, 
 
 ## Setup notes
 
-- Project: `sexpsplice/` inside the repo checkout with `deps.edn` (David's host: `~/projects/clojure-llm-tools/sexpsplice/`); the **live working copy** that `~/bin/sexpsplice` runs by default is `~/projects/sexpsplice/` — verified present, and the only sexpsplice checkout on David's host.
+- Project: `sexpsplice/` inside the repo checkout with `deps.edn` (resolve the root with `clj-repo-root`); `~/bin/sexpsplice` discovers its project directory the same way via `projects-root` (`$SEXPSPLICE_HOME` overrides).
 - Launcher `~/bin/sexpsplice` runs `clojure -Srepro -Sdeps '<deps>' -M sexpsplice.clj "$@"`; `SEXPSPLICE_HOME` overrides the project dir.
 - clj-kondo install: `curl -sL https://github.com/clj-kondo/clj-kondo/releases/download/v<VER>/clj-kondo-<VER>-linux-amd64.zip` (asset name has NO `v` prefix — `clj-kondo-2026.08.04-linux-amd64.zip`, not `.../latest/download/...`).
