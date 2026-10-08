@@ -49,7 +49,7 @@ Then **restart the gateway** so the hook registers:
 systemctl --user restart hermes-gateway
 ```
 
-## Two traps this installer exists to handle
+## Three traps this installer exists to handle
 
 **1. An unallowlisted hook is silently skipped.** Each `(event, command)` pair needs
 consent. In a non-TTY context — gateway, cron, CI — there is no prompt, so a hook
@@ -77,6 +77,34 @@ echo '{"tool_name":"terminal","args":{"command":"sed -i s/a/b/ core.clj"}}' > /t
 hermes hooks test pre_tool_call --payload-file /tmp/p.json
 #   parsed (Hermes wire shape): {"action": "block", "message": "BLOCKED by clj_guard: …"}
 ```
+
+**3. `pre_verify` payload fields go at the TOP LEVEL of the payload file, not under `extra`.**
+Same family as trap 2. The CLI's default payload for `pre_verify` carries `attempt` and
+`changed_paths` as top-level keys, and it is the *runtime serializer* that routes them into
+`extra` — which is where the hook reads them. Nest them under `extra` yourself and the hook
+receives an empty `extra` and stays silent:
+
+```bash
+echo '{"attempt":0,"changed_paths":["src/core.clj"],"coding":true}' > /tmp/pv.json
+hermes hooks test pre_verify --payload-file /tmp/pv.json   # -> {"action":"continue", …}
+```
+
+## Verify it is actually enforcing (not just configured)
+
+Config state and enforcement are different things. The check that proves enforcement is to
+**attempt the forbidden action against a scratch `.clj`** — if the gate is live the call is
+refused; if it is not, you have only scribbled on throwaway data:
+
+```bash
+: > /tmp/guardtest.clj
+echo '(ns guardtest.core)' | sexpsplice append /tmp/guardtest.clj
+sed -i 's/a/b/' /tmp/guardtest.clj     # must be BLOCKED with the steer message
+sexpsplice list /tmp/guardtest.clj     # the blocked write must NOT have landed
+```
+
+Confirm all three: the block *prevents* the write (file unchanged, not just warned), the
+sanctioned `sexpsplice`/`cljgen` path still works, and `patch`/`write_file` on the same path
+are refused too.
 
 ## Verify
 
