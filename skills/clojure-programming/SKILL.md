@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.5.1
+version: 1.6.0
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -88,9 +88,36 @@ closers, escape drift). After any such write on a .clj file: clj-kondo
 IMMEDIATELY — and if it fails, treat the file as broken (revert/rewrite per
 the rule above); do NOT keep patching.
 
+## Locating the repo (resolve it — never hardcode a home path)
+
+**The git remote is the only source of truth: `github-rk:dbelavy/clojure-llm-tools.git` (GitHub).**
+Checkout paths differ per host, and hardcoding one has broken this skill twice — once naming
+`~/repos/...`, once `~/projects/...`, each dead on the other host. So resolve it:
+
+```bash
+REPO="$(clj-repo-root)"     # prints the checkout root, or exits 1 with a clear message
+```
+
+`repo-root` ships at `scripts/repo-root` (installed on PATH as `clj-repo-root`; honours
+`CLJ_TOOLS_ROOT=...` for unusual layouts). On David's host it resolves to
+`~/projects/clojure-llm-tools`. Use `"$REPO/..."` in commands instead of a literal home path.
+
+**Paths that do NOT exist on David's host — do not chase them:** `~/repos/clojure-llm-tools`
+and `~/Shared/repos/clojure-llm-tools` (`~/Shared/` does not exist there at all).
+
+**Retired mirror — never fetch, pull, or push it.** The old
+`bitbucket-rk:richardkimble/clojure-llm-tools.git` mirror's `main` is `b4967a2` ("Initial
+commit") — a **parentless root commit that deletes the entire project** (14 files, ~1390 lines
+removed). It shares *no* history with the real repo, so a pull from it would wipe the working
+tree. Its only surviving clone is the stale shadow at
+`~/Sync/shared/outbox/repos/clojure-llm-tools` (3 ancient commits, Bitbucket remote, no
+`agent-hooks/`, no `docs/`). That directory is **not** the repo — ignore it, and never edit
+Clojure tooling there.
+
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source in the repo at `sexpsplice/` (plus `deps.edn`; a working copy may live elsewhere, kept in sync). Repo (contains both tools + docs + this skill + the `agent-hooks/` guard): the **git remote is the source of truth** (`github-rk:dbelavy/clojure-llm-tools.git`); local checkouts differ per host, so **resolve the path, don't assume it**. Verified on David's host: `~/projects/clojure-llm-tools/`. Do NOT chase `~/repos/clojure-llm-tools/` or `~/Shared/repos/clojure-llm-tools/` — neither resolves on David's host (`~/Shared/` does not exist there).
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`; source `sexpsplice/` inside the repo
+  (resolve the root as above). The live working copy it runs by default is `~/projects/sexpsplice/`.
 - **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
 
 **cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:

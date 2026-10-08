@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# repo-root — print the absolute path of the clojure-llm-tools checkout.
+#
+# WHY THIS EXISTS
+#   Two agents share this repo from different hosts, and each hardcoded its own
+#   local path into the skill. Every "fix" to ~/repos vs ~/projects broke the other
+#   host, and the skill ended up pointing at a path that did not resolve on the very
+#   machine it was installed on. Prose paths drift; this does not. The skill now says
+#   "run repo-root" instead of naming a directory, so neither layout can win or lose.
+#
+# Resolution order (first hit wins):
+#   1. $CLJ_TOOLS_ROOT                explicit override, for tests and unusual layouts
+#   2. the git toplevel of the cwd    if you are already inside the repo
+#   3. well-known checkout locations  per-host layouts, most specific first
+#   4. the git toplevel of $PWD/..    catch-all for a nested caller
+#
+# Exit 0 and print the root, or exit 1 with a diagnostic on stderr. Never guesses:
+# a wrong path is worse than a clear failure, because an agent will happily use it.
+set -euo pipefail
+
+# 1. explicit override
+if [ -n "${CLJ_TOOLS_ROOT:-}" ] && [ -d "$CLJ_TOOLS_ROOT/sexpsplice" ]; then
+  printf '%s\n' "$(cd "$CLJ_TOOLS_ROOT" && pwd)"
+  exit 0
+fi
+
+# 2. already inside the repo? git is the authority on the top level.
+if root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ -d "$root/sexpsplice" ]; then
+  printf '%s\n' "$root"
+  exit 0
+fi
+
+# 3. well-known locations. Both ~/projects and ~/repos appear in the wild because
+#    the two hosts disagree; accept either rather than declaring a winner.
+for candidate in \
+  "$HOME/projects/clojure-llm-tools" \
+  "$HOME/repos/clojure-llm-tools" \
+  "$HOME/Shared/repos/clojure-llm-tools" \
+  "$HOME/src/clojure-llm-tools" \
+  "$HOME/code/clojure-llm-tools" \
+  "$HOME/dev/clojure-llm-tools" \
+  "$HOME/Development/clojure-llm-tools"; do
+  if [ -d "$candidate/sexpsplice" ]; then
+    # Resolve symlinks so callers get a real path, not another indirection to chase.
+    printf '%s\n' "$(cd "$candidate" && pwd -P)"
+    exit 0
+  fi
+done
+
+# 4. last resort: one level up from the caller's cwd (e.g. called from a subdir).
+if root="$(git -C "$PWD/.." rev-parse --show-toplevel 2>/dev/null)" && [ -d "$root/sexpsplice" ]; then
+  printf '%s\n' "$root"
+  exit 0
+fi
+
+echo "repo-root: clojure-llm-tools checkout not found." >&2
+echo "  Set CLJ_TOOLS_ROOT=/path/to/clojure-llm-tools, or clone it" >&2
+echo "  (git remote: github-rk:dbelavy/clojure-llm-tools.git) and re-run." >&2
+exit 1

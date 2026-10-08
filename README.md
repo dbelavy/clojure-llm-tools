@@ -43,6 +43,9 @@ clojure-llm-tools/
 │   ├── SPEC.md          #   formal spec + acceptance criteria
 │   ├── v2_test.py       #   original regression fixture (still passes)
 │   └── v3_test.py       #   acceptance tests (36 checks)
+├── cljgen-clj/          # Clojure port of cljgen (EDN in -> balanced .clj out)
+├── scripts/
+│   └── repo-root        #   resolve the checkout path (never hardcode it)
 ├── sexpsplice/          # Clojure structural editor
 │   ├── sexpsplice.clj   #   the tool (9 commands)
 │   ├── deps.edn         #   rewrite-clj 1.2.57 + Clojars
@@ -58,6 +61,29 @@ clojure-llm-tools/
     └── clojure-programming/
         └── SKILL.md     # Hermes agent skill (install into ~/.hermes/skills/)
 ```
+
+## Repository & remotes (read this before "fixing" a path)
+
+**Canonical remote: `github-rk:dbelavy/clojure-llm-tools.git` (GitHub). It is the only source of truth.**
+
+Two agents work in this repo from different hosts, and the local checkout path differs between
+them. Hardcoding one has already broken the skill twice — once naming `~/repos/…`, once
+`~/projects/…`, each dead on the other host. **Resolve the path; don't assume it:**
+
+```bash
+REPO="$(clj-repo-root)"   # -> the checkout root, or exit 1 with a clear message
+```
+
+`scripts/repo-root` is the single implementation (installed on PATH as `clj-repo-root`, and it
+honours `CLJ_TOOLS_ROOT` for unusual layouts). Add a candidate path *there* if a new host needs
+one — never as a literal home path in the skill's prose.
+
+**Never fetch, pull, or push the retired Bitbucket mirror**
+(`bitbucket-rk:richardkimble/clojure-llm-tools.git`). Its `main` is `b4967a2` ("Initial commit"),
+a **parentless root commit that deletes the entire project** (14 files, ~1390 lines) and shares no
+history with the real repo — a pull from it would wipe the working tree. Its last surviving clone
+is the stale shadow `~/Sync/shared/outbox/repos/clojure-llm-tools` (3 ancient commits, no
+`agent-hooks/`, no `docs/`). That directory is not the repo.
 
 ## Quick start
 
