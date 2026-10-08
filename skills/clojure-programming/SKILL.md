@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.5.0
+version: 1.5.1
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -90,7 +90,7 @@ the rule above); do NOT keep patching.
 
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source in the canonical repo at `sexpsplice/` (plus `deps.edn`; a working copy may live elsewhere, kept in sync). Canonical repo (contains both tools + docs + this skill + the `agent-hooks/` guard): `~/repos/clojure-llm-tools/` on David's host (a symlink to `~/Shared/repos`, so `~/Shared/repos/clojure-llm-tools/` and `~/projects/...` on RK's host all refer to the same repo — use whatever resolves on the host you're on).
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source in the repo at `sexpsplice/` (plus `deps.edn`; a working copy may live elsewhere, kept in sync). Repo (contains both tools + docs + this skill + the `agent-hooks/` guard): the **git remote is the source of truth** (`github-rk:dbelavy/clojure-llm-tools.git`); local checkouts differ per host, so **resolve the path, don't assume it**. Verified on David's host: `~/projects/clojure-llm-tools/`. Do NOT chase `~/repos/clojure-llm-tools/` or `~/Shared/repos/clojure-llm-tools/` — neither resolves on David's host (`~/Shared/` does not exist there).
 - **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
 
 **cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:
@@ -130,7 +130,7 @@ Examples: `[2]` = top-level form 2; `[1 3]` = form 1's 3rd child (a defn body); 
 
 Full CRUD + batch + discover/reorder: create (append/insert), read (list + get + find), update (set), delete (delete), transactional multi-edit (apply), reorder (move).
 
-**The spec** lives at `~/repos/clojure-llm-tools/sexpsplice/SPEC.md` (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
+**The spec** lives at `<repo>/sexpsplice/SPEC.md` (David's host: `~/projects/clojure-llm-tools/sexpsplice/SPEC.md`; the live working copy is `~/projects/sexpsplice/SPEC.md`) (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
 
 stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, `index <i> out of range 0-<N-1>`, or `cannot parse file <file>` (the last one = the file is broken: revert or rewrite, don't patch).
 
@@ -161,6 +161,6 @@ stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, 
 
 ## Setup notes
 
-- Project: canonical `~/repos/clojure-llm-tools/sexpsplice/` with `deps.edn`; installed working copy `~/projects/sexpsplice/` (what `~/bin/sexpsplice` runs by default).
+- Project: `sexpsplice/` inside the repo checkout with `deps.edn` (David's host: `~/projects/clojure-llm-tools/sexpsplice/`); the **live working copy** that `~/bin/sexpsplice` runs by default is `~/projects/sexpsplice/` — verified present, and the only sexpsplice checkout on David's host.
 - Launcher `~/bin/sexpsplice` runs `clojure -Srepro -Sdeps '<deps>' -M sexpsplice.clj "$@"`; `SEXPSPLICE_HOME` overrides the project dir.
 - clj-kondo install: `curl -sL https://github.com/clj-kondo/clj-kondo/releases/download/v<VER>/clj-kondo-<VER>-linux-amd64.zip` (asset name has NO `v` prefix — `clj-kondo-2026.08.04-linux-amd64.zip`, not `.../latest/download/...`).
