@@ -111,12 +111,8 @@ than a clear failure, because an agent will cheerfully use it.
 **The git remote is the source of truth for any repo, not the directory it sits in.**
 For this one: `github-rk:dbelavy/clojure-llm-tools.git`.
 
-**Retired mirror — never fetch, pull, or push it.** The old
-`bitbucket-rk:richardkimble/clojure-llm-tools.git` mirror's `main` is `b4967a2` ("Initial
-commit") — a **parentless root commit that deletes the entire project** (14 files, ~1390 lines
-removed). It shares *no* history with the real repo, so a pull from it would wipe the working
-tree. A clone of it was the "second checkout" that caused the path churn; it has been
-repointed at GitHub.
+**One remote, and it is GitHub.** `origin` is the only remote; adding a second one is how this
+repo grew a divergent "second checkout" and the path churn that came with it. Don't.
 
 Use `"$REPO/..."` / `"$(repos-root)/<name>"` in commands rather than any literal home path.
 

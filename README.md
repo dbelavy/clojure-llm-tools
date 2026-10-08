@@ -88,10 +88,9 @@ being moved or renamed, and no host layout is baked in. Overrides for other host
 `$REPOS_ROOT`, `$PROJECTS_ROOT`, and legacy `$CLJ_TOOLS_ROOT`. It never guesses: a wrong path
 is worse than a clear failure, because an agent will happily use it.
 
-**Never fetch, pull, or push the retired Bitbucket mirror**
-(`bitbucket-rk:richardkimble/clojure-llm-tools.git`). Its `main` is `b4967a2` ("Initial commit"),
-a **parentless root commit that deletes the entire project** (14 files, ~1390 lines) and shares no
-history with the real repo — a pull from it would wipe the working tree.
+**`origin` is GitHub, and it is the only remote.** One remote means the remote is the source of
+truth — that is what makes "resolve the path, don't assume it" safe. Don't add a second one: a
+duplicate checkout pointed at a divergent remote is exactly what caused the path churn.
 
 ## Quick start
 
