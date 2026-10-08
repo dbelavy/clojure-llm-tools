@@ -1,7 +1,7 @@
 # Clojure LLM Tooling
 
-Two tools + one skill for letting an LLM reliably create and edit Clojure/EDN
-files **structurally** — never by hand-typing source.
+Two tools, one skill, and one **enforcement gate** for letting an LLM reliably
+create and edit Clojure/EDN files **structurally** — never by hand-typing source.
 
 The rule that motivates everything here:
 
@@ -47,9 +47,15 @@ clojure-llm-tools/
 │   ├── sexpsplice.clj   #   the tool (9 commands)
 │   ├── deps.edn         #   rewrite-clj 1.2.57 + Clojars
 │   ├── SPEC.md          #   formal spec + acceptance criteria
+│   ├── IMPLEMENTATION-NOTES.md  # 13 implementation gotchas
 │   └── bin/sexpsplice   #   launcher script
+├── agent-hooks/         # Hermes enforcement gate — see "Enforcement" below
+│   ├── clj_guard.py     #   pre_tool_call block + pre_verify nudge
+│   ├── install.sh       #   wire into Hermes (config + consent allowlist)
+│   ├── test_clj_guard.py#   52 verdict cases + stdin→stdout wire test
+│   └── README.md
 └── skills/
-    └── clojure-structural-editing/
+    └── clojure-programming/
         └── SKILL.md     # Hermes agent skill (install into ~/.hermes/skills/)
 ```
 
@@ -75,6 +81,33 @@ sexpsplice list   /tmp/demo.clj
 sexpsplice get    /tmp/demo.clj 1
 sexpsplice set    /tmp/demo.clj 1 <<< '(defn square [n] (* n n))'
 ```
+
+## Enforcement: `agent-hooks/` — a gate, because a skill is only advice
+
+The skill teaches the rule. On its own it is **not enough**: an agent can hold the
+rule and still reach for `sed` mid-session, because nothing stops it. So the rule
+is enforced by a Hermes
+[shell hook](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks)
+on `pre_tool_call`:
+
+```bash
+cd agent-hooks && ./install.sh     # then: systemctl --user restart hermes-gateway
+python3 agent-hooks/test_clj_guard.py   # 52 cases + wire protocol
+```
+
+It **blocks** any attempt to rewrite `.clj`/`.cljc`/`.cljs`/`.edn` as text —
+`sed -i`, `perl -i`, a scripting interpreter, a content redirect, `tee`/`dd`, an
+editor, or the `patch`/`write_file` tools — and returns the correct
+sexpsplice/cljgen command *at the moment of the mistake*. That timing is the
+point: guidance delivered when the agent reaches for the wrong tool is what
+changes behaviour. A `pre_verify` hook additionally refuses to let a turn finish
+after touching Clojure without `clj-kondo` + `sexpsplice list` + `wc -l` + a real
+`require`.
+
+See [`agent-hooks/README.md`](agent-hooks/README.md) — including the two traps
+that make an installed hook silently do nothing (missing consent allowlist in a
+non-TTY gateway; `hermes hooks test` wanting `args` where the runtime sends
+`tool_input`).
 
 ## Verification rule (never skip)
 

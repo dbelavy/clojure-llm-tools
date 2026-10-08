@@ -24,6 +24,16 @@ sexpsplice insert <file> <idx>         insert ONE form from stdin at index IDX
 Flags (anywhere): `--dry-run`/`-n` prints the would-be result without writing;
 `--no-backup` skips the `.bak` backup.
 
+**`move`/`insert` behaviours (know these before relying on them):**
+
+- `move` canonicalises *inter-form* separators: blank lines between top-level
+  forms collapse to single newlines. A form's own internal content (including
+  internal blank lines) is preserved byte-for-byte. For byte-exact whitespace,
+  use `set` instead of `move`.
+- `insert` at index N places the form *at* N and pushes existing forms down, so
+  repeated `insert <idx> 0` calls land in REVERSE order (C, B, A). Insert in
+  reverse, or `append` then `move`, to get forward order.
+
 ## Path syntax
 
 A vector of selectors, each descending one level:

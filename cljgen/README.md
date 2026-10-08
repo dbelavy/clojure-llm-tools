@@ -31,6 +31,20 @@ by construction, then re-checked by `bal_ok` before any write.
 balance-checked — reader macros (`#()`, `#{}`, `#uuid`, `#'x`) go through it,
 never through a plain string.
 
+### The one trap: don't invert the mapping
+
+The recurring mistake is putting the *right values in the wrong Python type*:
+
+- **Binding / arg vectors are ONE flat `tuple`, not a list of pairs.**
+  `(let [a 1 b 2] body)` is `[Sym("let"), (Sym("a"), 1, Sym("b"), 2), body]` —
+  a single tuple of alternating name/value, NOT `[(Sym("a"), 1), (Sym("b"), 2)]`
+  (that emits a vector of two nested vectors). A `defn` arg vector is `(Sym("n"),)`.
+- **`(atom nil)` is a LIST call** — `[Sym("atom"), None]` emits `(atom nil)` (a
+  form), not a vector.
+- **A form's head is a `Sym`, its body is a `list`.** `(def x 1)` is
+  `[Sym("def"), Sym("x"), 1]`. clj-kondo localises each inversion cheaply, so
+  generate then lint; but keep the flat-tuple rule in mind when authoring.
+
 ## Usage
 
 ```python

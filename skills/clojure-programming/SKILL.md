@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.3.1
+version: 1.5.0
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -19,6 +19,18 @@ Author and edit `.clj`/`.edn` files **structurally**, never textually. Two tools
 - **Edit** (change an existing file): `sexpsplice` by form index — name a form, supply one replacement, everything else is preserved **byte-for-byte** (comments, reader macros `#()`/`#{}`, formatting all survive).
 
 Never hand-edit Clojure with sed, python string munging, or `pr-str` — those corrupt delimiters, expand reader macros into `(fn* ...)`, and drop comments. **This is a standing user rule (2026-09-28): a broken `.clj` file is either reverted to a prior good state or rewritten from the ground up with sexpsplice — never incrementally hand-repaired.**
+
+## Enforcement: `clj_guard` — the rule is now a gate, not a suggestion
+
+This skill was not enough on its own: an agent can hold the rule and still reach for `sed` in a long session, because nothing *stopped* it. So the rule is now **enforced** by `clj_guard`, a Hermes `pre_tool_call` shell hook installed at `~/.hermes/agent-hooks/clj_guard.py`.
+
+**If you try to rewrite a `.clj`/`.cljc`/`.cljs`/`.edn` file as text, the call is BLOCKED** — `sed -i`/`perl -i`/`awk -i inplace`, a scripting interpreter (`python3 -c "open('x.clj','w')…"`, `node -e`, `ruby -e`), a shell redirect carrying content (`echo '(ns x)' > f.clj`, `cat > f.clj <<EOF`), `tee`/`dd`/`truncate`, an interactive editor, or the **`patch`**/**`write_file`** tools on a Clojure path. The block message names the exact sexpsplice/cljgen command to use instead. **That message is the instruction.** Rewording the same `sed`, base64-ing it, hiding it in a helper script, or routing it through `execute_code` is not a fix — it is the exact failure this gate exists to catch. If the block is genuinely wrong for a legitimate workflow, that is a *bug in the guard*: add the case to the `ALLOW` table in `agent-hooks/test_clj_guard.py` and re-run `./install.sh`.
+
+What still works, by design: everything `sexpsplice` (`list`/`get`/`set`/`append`/`delete`/`apply`/`find`/`move`/`insert`), anything invoking `cljgen` (including `python3 …/cljgen/cljgen.py`), starting a file with `: > f.clj`, reads (`cat`/`grep`/`wc`/`sed -n`), `clj-kondo --lint`, `clojure -M`, and any non-Clojure file.
+
+A second hook, **`pre_verify`**, fires once when a turn changed a `.clj` file and will not let you finish without the verification checklist: `clj-kondo --lint` + `sexpsplice list` + `wc -l` (≤ 50) + a real `~/.local/bin/clojure -M -e "(require '<ns>)"`.
+
+Source, tests, installer: `~/projects/clojure-llm-tools/agent-hooks/` — `python3 agent-hooks/test_clj_guard.py` (52 cases + wire protocol).
 
 ## When to Use
 
@@ -78,8 +90,15 @@ the rule above); do NOT keep patching.
 
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/repos/clojure-llm-tools/sexpsplice/sexpsplice.clj` (plus `deps.edn`; installed working copy `~/projects/sexpsplice/`, kept in sync). Canonical repo: `~/repos/clojure-llm-tools/` (contains both tools + docs + this skill).
-- **`cljgen`** — the emit-side companion (Python): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/repos/clojure-llm-tools/cljgen/`.
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source in the canonical repo at `sexpsplice/` (plus `deps.edn`; a working copy may live elsewhere, kept in sync). Canonical repo (contains both tools + docs + this skill + the `agent-hooks/` guard): `~/repos/clojure-llm-tools/` on David's host (a symlink to `~/Shared/repos`, so `~/Shared/repos/clojure-llm-tools/` and `~/projects/...` on RK's host all refer to the same repo — use whatever resolves on the host you're on).
+- **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
+
+**cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:
+
+- **Binding/arg vectors are ONE flat `tuple`, not a list of pairs.** `(let [a 1 b 2] ...)` is written `[Sym("let"), (Sym("a"), 1, Sym("b"), 2), <body>]` — a single tuple of alternating name/value, NOT `[(Sym("a"), 1), (Sym("b"), 2)]` (that would emit a vector of two nested vectors). Same for a `defn` arg vector: `(Sym("n"),)`.
+- **`(atom nil)` is a LIST call**, not a special form — write `[Sym("atom"), None]`, which emits `(atom nil)` (a form), correctly distinct from `[ ... ]`.
+- **A form's head is a `Sym`, its body is a `list`.** `(def square ...)` → `[Sym("def"), Sym("square"), ...]`. Getting the head/body nesting right is the whole game; clj-kondo localises each inversion cheaply, but a worked example (see `cljgen/cljgen.py` docstring `USAGE`) saves re-deriving it.
+
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
 ### Commands
@@ -97,6 +116,10 @@ sexpsplice insert <file> <idx>         insert ONE form from stdin at index IDX
 ```
 
 Flags (anywhere): `--dry-run`/`-n` prints the would-be result without writing; `--no-backup` skips the `.bak` backup.
+
+**Two `move`/`insert` behaviours to know before you use them:**
+- **`move` canonicalises inter-form separators.** It collapses blank lines *between* top-level forms to single newlines (the block model drops whitespace and re-emits with single-newline separators). A form's *own* internal content — including blank lines inside it — is preserved byte-for-byte. So `(def b\n\n  2)` keeps its internal blank line, but the gap between `(def a 1)` and `(def b ...)` does not survive a `move`. If you need whitespace exactly preserved, use `set` (byte-preserving), not `move`.
+- **`insert` at the same index stacks in REVERSE.** Each `insert` places its form *at* index N and pushes existing forms down, so three `insert idx 0` calls land as C, B, A (reverse of insertion order). To insert several forms in forward order at the front, insert them in reverse, or `append` then `move` (chained moves fix ordering).
 
 **Path syntax** = vector of selectors, each descending one level:
 - integer → Nth value child (0-based, whitespace/comments skipped)
