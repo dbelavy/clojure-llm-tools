@@ -3,34 +3,49 @@
 #
 # WHY THIS EXISTS
 #   Two agents share these repos from different hosts, and each hardcoded its own
-#   local path into the shared skill. Every "fix" to ~/repos vs ~/projects broke the
-#   other host, and the skill ended up pointing at a path that did not resolve on the
-#   very machine it was installed on. Worse, a stale checkout of the same repo was
-#   sitting in a synced folder with a different git remote, so "the path" was never
-#   the real question — which copy is canonical, was.
+#   local path into the shared skill. Every "fix" to one layout broke the other, and
+#   the skill ended up asserting things that were false on the machine it was
+#   installed on. Worse, a stale checkout of the same repo sat in a synced folder
+#   with a different git remote, so "which path" was never the real question — which
+#   copy is canonical, was.
 #
-# THE RULE NOW
-#   The Syncthing "shared" folder is canonical for all repositories and projects.
-#   This script finds it by discovery, not by assuming a path:
-#   a Syncthing folder root is any directory containing a `.stfolder` marker.
-#   Canonical subdirectories are `repos/` (git repositories) and `projects/` (non-repo
-#   projects, e.g. cljgen, sexpsplice).
+# THE RULE
+#   The Syncthing shared folder is canonical for all repositories and projects.
+#   A Syncthing folder root is any directory containing a `.stfolder` marker.
+#   Canonical subdirectories are `repos/` (git repositories) and `projects/`
+#   (non-repo projects, e.g. cljgen, sexpsplice).
+#
+# MULTIPLE ROOTS — why discovery is RANKED, not first-match
+#   A host can carry more than one `.stfolder` (e.g. a live shared folder plus a
+#   stale agent workspace bind-mounted over an old one). Taking the first hit is
+#   wrong: it silently resolves to a partial mirror and then reports real repos as
+#   "not found". So candidates are ranked:
+#     1. most entries in the subdirectory — a canonical root is a superset of a
+#                                          stale partial mirror
+#     2. shallower path                   — a nested copy is usually the stale one
+#     3. lexicographic                    — determinism
+#   And `repo-root <name>` searches EVERY root, so a repo that lives only in a
+#   lower-ranked root is still found rather than reported missing.
 #
 # USAGE
 #   repo-root                 # path to the clojure-llm-tools repo
-#   repo-root <name>          # path to any repo under the canonical repos root
+#   repo-root <name>          # any repo, searched across all discovered roots
 #   repo-root --repos-root    # the canonical repos root itself
 #   repo-root --projects-root # the canonical projects root itself
-#   repo-root --list          # show every candidate root and whether it resolves
+#   repo-root --list          # every candidate root, ranked, with the winner
 #
 # OVERRIDES (for tests, unusual layouts, other hosts)
-#   $REPOS_ROOT, $PROJECTS_ROOT, $CLJ_TOOLS_ROOT (legacy, clojure-llm-tools only)
+#   $REPOS_ROOT, $PROJECTS_ROOT  — win outright, no ranking
+#   $CLJ_TOOLS_ROOT              — legacy, an explicit clojure-llm-tools checkout
 #
-# Exit 0 and print the path, or exit 1 with a diagnostic on stderr. It never guesses:
-# a wrong path is worse than a clear failure, because an agent will happily use it.
+# Exit 0 and print the path, or exit 1 with a diagnostic on stderr. It never
+# guesses: a wrong path is worse than a clear failure, because an agent will
+# happily use it.
 set -euo pipefail
 
 DEFAULT_REPO="clojure-llm-tools"
+
+usable() { [ -n "${1:-}" ] && [ -d "$1" ]; }
 
 # --- discovery -----------------------------------------------------------------
 # Any directory holding a Syncthing `.stfolder` marker is a synced-folder root.
@@ -39,38 +54,43 @@ discover_sync_roots() {
   find "$HOME" -maxdepth 4 -name .stfolder -printf '%h\n' 2>/dev/null || true
 }
 
-# Sanity check: a usable canonical dir must exist and be a directory.
-usable() { [ -n "${1:-}" ] && [ -d "$1" ]; }
-
-# Resolve the canonical repos root.
-repos_root() {
-  if usable "${REPOS_ROOT:-}"; then printf '%s\n' "$(cd "$REPOS_ROOT" && pwd -P)"; return 0; fi
-
-  local r
+# Ranked candidates for a given subdirectory name ("repos" or "projects").
+# Emits: <entry count>\t<path depth>\t<absolute path>, best first.
+ranked_roots() {
+  local sub="$1" r dir n d
   while IFS= read -r r; do
-    if usable "$r/repos"; then printf '%s\n' "$(cd "$r/repos" && pwd -P)"; return 0; fi
-  done < <(discover_sync_roots)
+    dir="$r/$sub"
+    [ -d "$dir" ] || continue
+    n=$(find "$dir" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
+    d=$(printf '%s' "$dir" | awk -F/ '{print NF}')
+    printf '%s\t%s\t%s\n' "$n" "$d" "$dir"
+  done < <(discover_sync_roots) | sort -k1,1nr -k2,2n -k3,3
+}
 
-  # Legacy fallbacks so the resolver still works on a host that has not migrated yet.
-  for r in "$HOME/repos" "$HOME/Shared/repos"; do
-    if usable "$r"; then printf '%s\n' "$(cd "$r" && pwd -P)"; return 0; fi
+# Best-ranked candidate for a subdirectory, else the first usable legacy path.
+best_root() {
+  local sub="$1"; shift
+  local line dir
+  line="$(ranked_roots "$sub" | head -1 || true)"
+  if [ -n "$line" ]; then
+    dir="$(printf '%s' "$line" | cut -f3)"
+    (cd "$dir" && pwd -P)
+    return 0
+  fi
+  for dir in "$@"; do
+    if usable "$dir"; then (cd "$dir" && pwd -P); return 0; fi
   done
   return 1
 }
 
-# Resolve the canonical projects root.
+repos_root() {
+  if usable "${REPOS_ROOT:-}"; then (cd "$REPOS_ROOT" && pwd -P); return 0; fi
+  best_root repos "$HOME/repos" "$HOME/Shared/repos"
+}
+
 projects_root() {
-  if usable "${PROJECTS_ROOT:-}"; then printf '%s\n' "$(cd "$PROJECTS_ROOT" && pwd -P)"; return 0; fi
-
-  local r
-  while IFS= read -r r; do
-    if usable "$r/projects"; then printf '%s\n' "$(cd "$r/projects" && pwd -P)"; return 0; fi
-  done < <(discover_sync_roots)
-
-  for r in "$HOME/projects"; do
-    if usable "$r"; then printf '%s\n' "$(cd "$r" && pwd -P)"; return 0; fi
-  done
-  return 1
+  if usable "${PROJECTS_ROOT:-}"; then (cd "$PROJECTS_ROOT" && pwd -P); return 0; fi
+  best_root projects "$HOME/projects"
 }
 
 # --- dispatch ------------------------------------------------------------------
@@ -84,8 +104,12 @@ case "${1:-}" in
   --list)
     echo "discovered sync roots (dirs containing .stfolder):"
     discover_sync_roots | sed 's/^/  /' || true
-    echo "repos root:    $(repos_root 2>/dev/null || echo '<unresolved>')"
-    echo "projects root: $(projects_root 2>/dev/null || echo '<unresolved>')"
+    for sub in repos projects; do
+      echo ""
+      echo "$sub candidates (ranked: entry count desc, depth asc, path):"
+      ranked_roots "$sub" | awk -F'\t' '{printf "  %4s entries  depth %-3s  %s\n", $1, $2, $3}' || true
+      printf '  winner: %s\n' "$(best_root "$sub" "$HOME/$sub" 2>/dev/null || echo '<unresolved>')"
+    done
     exit 0 ;;
   ""|--repo)
     NAME="$DEFAULT_REPO" ;;
@@ -95,20 +119,26 @@ esac
 
 # Legacy override: an explicit checkout of clojure-llm-tools, for tests and odd layouts.
 if [ "$NAME" = "$DEFAULT_REPO" ] && usable "${CLJ_TOOLS_ROOT:-}"; then
-  printf '%s\n' "$(cd "$CLJ_TOOLS_ROOT" && pwd -P)"; exit 0
+  (cd "$CLJ_TOOLS_ROOT" && pwd -P); exit 0
 fi
 
 # Already inside the target repo? git is the authority on the top level.
 if root="$(git rev-parse --show-toplevel 2>/dev/null)" && [ "$(basename "$root")" = "$NAME" ]; then
-  printf '%s\n' "$(cd "$root" && pwd -P)"; exit 0
+  (cd "$root" && pwd -P); exit 0
 fi
 
-if R="$(repos_root)"; then
-  if usable "$R/$NAME"; then printf '%s\n' "$(cd "$R/$NAME" && pwd -P)"; exit 0; fi
-fi
+# Search EVERY ranked root, not just the best: a repo that lives only in a
+# lower-ranked root must still be found rather than reported missing.
+while IFS= read -r line; do
+  dir="$(printf '%s' "$line" | cut -f3)"
+  if usable "$dir/$NAME"; then (cd "$dir/$NAME" && pwd -P); exit 0; fi
+done < <(ranked_roots repos)
 
-echo "repo-root: '$NAME' not found in the canonical repos root." >&2
-echo "  Tried: ${REPOS_ROOT:-<discovered sync root>/repos}" >&2
-echo "  Run 'repo-root --list' to see what resolved." >&2
+for dir in "$HOME/repos/$NAME" "$HOME/Shared/repos/$NAME"; do
+  if usable "$dir"; then (cd "$dir" && pwd -P); exit 0; fi
+done
+
+echo "repo-root: '$NAME' not found in any discovered repos root." >&2
+echo "  Run 'repo-root --list' to see the ranked candidates." >&2
 echo "  Override with REPOS_ROOT=/path/to/repos if this host differs." >&2
 exit 1
