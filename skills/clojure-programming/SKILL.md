@@ -13,9 +13,9 @@ metadata:
 
 # Clojure Programming (cljgen + sexpsplice)
 
-Author and edit `.clj`/`.edn` files **structurally**, never textually. Two tools:
+Author and edit `.clj`/`.edn` files **structurally**, never textually. Two **Clojure** tools:
 
-- **Author** (build a file): `cljgen` (Python, data → `.clj`) or the `sexpsplice append` loop — add one form at a time.
+- **Author** (build a file): `cljgen` (Clojure, EDN data → `.clj`) or the `sexpsplice append` loop — add one form at a time.
 - **Edit** (change an existing file): `sexpsplice` by form index — name a form, supply one replacement, everything else is preserved **byte-for-byte** (comments, reader macros `#()`/`#{}`, formatting all survive).
 
 Never hand-edit Clojure with sed, python string munging, or `pr-str` — those corrupt delimiters, expand reader macros into `(fn* ...)`, and drop comments. **This is a standing user rule (2026-09-28): a broken `.clj` file is either reverted to a prior good state or rewritten from the ground up with sexpsplice — never incrementally hand-repaired.**
@@ -26,7 +26,7 @@ This skill was not enough on its own: an agent can hold the rule and still reach
 
 **If you try to rewrite a `.clj`/`.cljc`/`.cljs`/`.edn` file as text, the call is BLOCKED** — `sed -i`/`perl -i`/`awk -i inplace`, a scripting interpreter (`python3 -c "open('x.clj','w')…"`, `node -e`, `ruby -e`), a shell redirect carrying content (`echo '(ns x)' > f.clj`, `cat > f.clj <<EOF`), `tee`/`dd`/`truncate`, an interactive editor, or the **`patch`**/**`write_file`** tools on a Clojure path. The block message names the exact sexpsplice/cljgen command to use instead. **That message is the instruction.** Rewording the same `sed`, base64-ing it, hiding it in a helper script, or routing it through `execute_code` is not a fix — it is the exact failure this gate exists to catch. If the block is genuinely wrong for a legitimate workflow, that is a *bug in the guard*: add the case to the `ALLOW` table in `agent-hooks/test_clj_guard.py` and re-run `./install.sh`.
 
-What still works, by design: everything `sexpsplice` (`list`/`get`/`set`/`append`/`delete`/`apply`/`find`/`move`/`insert`), anything invoking `cljgen` (including `python3 …/cljgen/cljgen.py`), starting a file with `: > f.clj`, reads (`cat`/`grep`/`wc`/`sed -n`), `clj-kondo --lint`, `clojure -M`, and any non-Clojure file.
+What still works, by design: everything `sexpsplice` (`list`/`get`/`set`/`append`/`delete`/`apply`/`find`/`move`/`insert`), anything invoking `cljgen` (including `clojure -M -m cljgen.cli`, since cljgen *is* Clojure), starting a file with `: > f.clj`, reads (`cat`/`grep`/`wc`/`sed -n`), `clj-kondo --lint`, `clojure -M`, and any non-Clojure file.
 
 A second hook, **`pre_verify`**, fires once when a turn changed a `.clj` file and will not let you finish without the verification checklist: `clj-kondo --lint` + `sexpsplice list` + `wc -l` (≤ 50) + a real `~/.local/bin/clojure -M -e "(require '<ns>)"`.
 
@@ -108,6 +108,13 @@ repo-root --list             # show what resolved, for debugging
 `$PROJECTS_ROOT`, and legacy `$CLJ_TOOLS_ROOT`. It **never guesses** — a wrong path is worse
 than a clear failure, because an agent will cheerfully use it.
 
+**Caveat: two sync roots.** A host can turn up a SECOND `.stfolder` dir (on this host,
+the live shared folder plus a stale mirror at `~/.openclaw/workspace`). Until 2f932dc,
+first-match discovery silently returned the stale root; the ranked, search-every-root
+behaviour now handles it. If `--list` ever shows a surprising winner, read the candidate
+table instead of overriding blindly, and use `REPOS_ROOT`/`PROJECTS_ROOT` for a
+one-off override.
+
 **The git remote is the source of truth for any repo, not the directory it sits in.**
 For this one: `github-rk:dbelavy/clojure-llm-tools.git`.
 
@@ -121,13 +128,16 @@ Use `"$REPO/..."` / `"$(repos-root)/<name>"` in commands rather than any literal
 - **`sexpsplice`** — launcher at `~/bin/sexpsplice`; source `sexpsplice/` inside the repo
   (resolve the root as above). The launcher discovers its project directory the same way
   (`$SEXPSPLICE_HOME` overrides), so it follows the repo if the layout moves.
-- **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
+- **`cljgen`** — the emit-side companion. **Clojure** (`cljgen-clj/`, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. The Python reference `cljgen/cljgen.py` (module, imported — not a CLI) is kept only to byte-verify the Clojure port — **author with the Clojure `cljgen`, not the Python module.** Use cljgen to *create* files; use sexpsplice to *edit* them.
 
-**cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:
+**cljgen EDN mapping — the one trap to internalise.** Because EDN has no list literal, you author each target form as an **EDN vector** and `write-forms!` (`to-form`) rewrites it to a **list** in the output — with ONE exception: a vector whose single element is a symbol (`[n]`) stays a vector. That exception is exactly the parameter/binding vectors, so they come out as vectors automatically. Concretely:
 
-- **Binding/arg vectors are ONE flat `tuple`, not a list of pairs.** `(let [a 1 b 2] ...)` is written `[Sym("let"), (Sym("a"), 1, Sym("b"), 2), <body>]` — a single tuple of alternating name/value, NOT `[(Sym("a"), 1), (Sym("b"), 2)]` (that would emit a vector of two nested vectors). Same for a `defn` arg vector: `(Sym("n"),)`.
-- **`(atom nil)` is a LIST call**, not a special form — write `[Sym("atom"), None]`, which emits `(atom nil)` (a form), correctly distinct from `[ ... ]`.
-- **A form's head is a `Sym`, its body is a `list`.** `(def square ...)` → `[Sym("def"), Sym("square"), ...]`. Getting the head/body nesting right is the whole game; clj-kondo localises each inversion cheaply, but a worked example (see `cljgen/cljgen.py` docstring `USAGE`) saves re-deriving it.
+- **Author the form directly in EDN.** `(ns demo.core)` and `(defn square [n] (* n n))` are written as plain EDN vectors; the head is a bare symbol, the body follows. `to-form` turns the outer vector into the list `(defn square [n] (* n n))` while `[n]` (1 element, a symbol) stays a vector.
+- **Multi-element binding/arg vectors become lists.** A `let` binding `[a 1 b 2]` is an EDN vector whose element count > 1, so `to-form` turns it into the flat list `(a 1 b 2)` — the alternating name/value form `let`/`defmulti` expect. Never author `[[a 1] [b 2]]` (a vector of two nested vectors) — that is the classic Python-port inversion.
+- **`(atom nil)` is a LIST call, not a vector.** Author it as the EDN vector `(atom nil)`; `to-form` emits the list `(atom nil)`, correctly distinct from a vector.
+- **Reader macros / raw text go through the escape maps, never a plain string:** `{:__raw__ "#(+ % 1) xs"}` → verbatim `#(+ % 1) xs` (balance-checked); `{:__char__ "newline"}` → `\newline` (a char literal). A plain string always becomes a quoted Clojure string.
+
+The whole output is balance-checked before the write. (The old Python mapping `list`→`(` / `tuple`→`[` / `Sym`/`Kw`/`Raw` is retired for authoring — it remains only as the byte-reference the port is verified against.)
 
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
