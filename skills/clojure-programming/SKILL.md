@@ -2,7 +2,7 @@
 name: clojure-programming
 category: software-development
 description: "Use for writing or editing Clojure/EDN: cljgen + sexpsplice. Idiomatic pure functional style, -> / ->> threading, strict tool-verified paren balance."
-version: 1.4.0
+version: 1.5.0
 author: Richard Kimble (renamed clojure-structural-editing → clojure-programming by David, 2026-09-28)
 license: MIT
 metadata:
@@ -90,14 +90,15 @@ the rule above); do NOT keep patching.
 
 ## The tool
 
-- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source at `~/projects/sexpsplice/sexpsplice.clj` (plus `deps.edn`). Canonical repo: `~/projects/clojure-llm-tools/` (contains both tools + docs + this skill + the `agent-hooks/` guard). There is **no** `~/repos/clojure-llm-tools` — that path does not exist.
-- **`cljgen`** — the emit-side companion (Python module, imported — not a CLI): build `.clj` from typed data. Use it to *create* files; use sexpsplice to *edit* them. See `~/projects/clojure-llm-tools/cljgen/`.
+- **`sexpsplice`** — launcher at `~/bin/sexpsplice`, source in the canonical repo at `sexpsplice/` (plus `deps.edn`; a working copy may live elsewhere, kept in sync). Canonical repo (contains both tools + docs + this skill + the `agent-hooks/` guard): `~/repos/clojure-llm-tools/` on David's host (a symlink to `~/Shared/repos`, so `~/Shared/repos/clojure-llm-tools/` and `~/projects/...` on RK's host all refer to the same repo — use whatever resolves on the host you're on).
+- **`cljgen`** — the emit-side companion. **Clojure version** `cljgen-clj/` (Clojure, EDN in → balanced `.clj` out; `clj-kondo`-gated, byte-exact against the Python reference): `clojure -M -m cljgen.cli forms.edn out.clj`. **Python version** `cljgen/cljgen.py` (module, imported — not a CLI): build `.clj` from typed data. Use cljgen to *create* files; use sexpsplice to *edit* them.
 
 **cljgen collection mapping — the one trap to internalise.** The Python→Clojure mapping is exact: `list` → `( ... )` form, `tuple` → `[ ... ]` vector, `dict` → map, `Sym("x")` → bare symbol, `Raw("...")` → verbatim (balance-checked). The trap is *inverting* which Python type goes where:
 
 - **Binding/arg vectors are ONE flat `tuple`, not a list of pairs.** `(let [a 1 b 2] ...)` is written `[Sym("let"), (Sym("a"), 1, Sym("b"), 2), <body>]` — a single tuple of alternating name/value, NOT `[(Sym("a"), 1), (Sym("b"), 2)]` (that would emit a vector of two nested vectors). Same for a `defn` arg vector: `(Sym("n"),)`.
 - **`(atom nil)` is a LIST call**, not a special form — write `[Sym("atom"), None]`, which emits `(atom nil)` (a form), correctly distinct from `[ ... ]`.
 - **A form's head is a `Sym`, its body is a `list`.** `(def square ...)` → `[Sym("def"), Sym("square"), ...]`. Getting the head/body nesting right is the whole game; clj-kondo localises each inversion cheaply, but a worked example (see `cljgen/cljgen.py` docstring `USAGE`) saves re-deriving it.
+
 - **`clj-kondo`** — installed at `~/.local/bin/clj-kondo` for lint verification.
 
 ### Commands
@@ -129,7 +130,7 @@ Examples: `[2]` = top-level form 2; `[1 3]` = form 1's 3rd child (a defn body); 
 
 Full CRUD + batch + discover/reorder: create (append/insert), read (list + get + find), update (set), delete (delete), transactional multi-edit (apply), reorder (move).
 
-**The spec** lives at `~/projects/sexpsplice/SPEC.md` (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
+**The spec** lives at `~/repos/clojure-llm-tools/sexpsplice/SPEC.md` (commands, path syntax, invariants, acceptance criteria, non-goals). Read it before extending.
 
 stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, `index <i> out of range 0-<N-1>`, or `cannot parse file <file>` (the last one = the file is broken: revert or rewrite, don't patch).
 
@@ -160,6 +161,6 @@ stdin carries exactly one form. Errors exit 1 with `no readable form on stdin`, 
 
 ## Setup notes
 
-- Project: `~/projects/sexpsplice/` with `deps.edn` (`:aliases {:run {:main-opts ["sexpsplice.clj"]}}`).
+- Project: canonical `~/repos/clojure-llm-tools/sexpsplice/` with `deps.edn`; installed working copy `~/projects/sexpsplice/` (what `~/bin/sexpsplice` runs by default).
 - Launcher `~/bin/sexpsplice` runs `clojure -Srepro -Sdeps '<deps>' -M sexpsplice.clj "$@"`; `SEXPSPLICE_HOME` overrides the project dir.
 - clj-kondo install: `curl -sL https://github.com/clj-kondo/clj-kondo/releases/download/v<VER>/clj-kondo-<VER>-linux-amd64.zip` (asset name has NO `v` prefix — `clj-kondo-2026.08.04-linux-amd64.zip`, not `.../latest/download/...`).
