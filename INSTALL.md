@@ -41,18 +41,25 @@ sexpsplice --help        # smoke test
 - `SEXPSPLICE_HOME` env var overrides the project dir (default `~/projects/sexpsplice`).
 - Dependency (rewrite-clj 1.2.57) is fetched from Clojars on first run.
 
-## cljgen (Python emitter)
+## cljgen (Clojure emitter)
 
-Pure stdlib — no pip installs, no dependencies. Just add the directory to
-`sys.path` (or `PYTHONPATH`) and import:
+The authoring tool is the **Clojure** `cljgen-clj/` — no Python, no pip
+installs. Author EDN data (a vector of forms); the tool emits balanced `.clj`.
 
 ```bash
-export PYTHONPATH="$PWD/cljgen:$PYTHONPATH"
-python3 -c "from cljgen import Sym, Kw, emit; print(emit([Sym('def'), Sym('x'), 1]))"
-# -> (def x 1)
+# Author a file: EDN in -> .clj out (balance-gated)
+printf '[ (ns demo.core) (defn square [n] (* n n)) ]' > /tmp/forms.edn
+(cd cljgen-clj && clojure -M -m cljgen.cli /tmp/forms.edn /tmp/demo.clj)
+# -> wrote /tmp/demo.clj
 ```
 
-Run the acceptance tests:
+EDN has no list literal: top-level vector = one form per element (each form
+becomes a list); `{:__vec__ [...]}` emits a vector (arg/binding vectors —
+ALWAYS use it for those), and a bare 1-element symbol vector (`[n]`) stays a
+vector.
+
+Run the verification battery (the Python `cljgen/` is the byte-exact reference
+the Clojure port is checked against — do NOT author with it):
 
 ```bash
 cd cljgen && python3 v3_test.py     # 36 checks, exit 0
@@ -62,8 +69,8 @@ cd cljgen && python3 v2_test.py     # regression fixture
 ## Install the Hermes agent skill (optional)
 
 ```bash
-cp -r skills/clojure-structural-editing ~/.hermes/skills/
+cp -r skills/clojure-programming ~/.hermes/skills/
 ```
 
-Then an Hermes agent (or any Claude-style agent) has the full 9-command
+Then a Hermes agent (or any Claude-style agent) has the full 9-command
 reference, path syntax, and the 13 implementation gotchas on hand.

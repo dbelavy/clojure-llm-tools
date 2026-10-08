@@ -20,13 +20,17 @@ and refuses to emit unbalanced output).
 
 ## Usage
 ```
-clojure -M -m cljgen.cli forms.edn out.clj     # pretty (default)
+cd cljgen-clj && clojure -M -m cljgen.cli forms.edn out.clj     # pretty (default)
 ```
-EDN has no list literal; `write-forms!` maps vectors → lists, except a
-1-element vector of a symbol (a parameter/binding vector like `[n]`), which
-stays a vector. The whole output is balance-checked before writing.
+EDN has no list literal: `write-forms!` maps vectors → lists, EXCEPT (a) a
+1-element vector of a symbol (a single-arg parameter vector like `[n]`) and (b)
+a `{:__vec__ [...]}` escape map, which emit as vectors `[ ... ]`. **Always use
+`{:__vec__ [...]}` for arg/binding vectors** — `(defn add {:__vec__ [a b]}
+(+ a b))` → `(defn add [a b] (+ a b))`; a bare multi-element vector would
+become a list and emit invalid Clojure. Other escape maps: `{:__raw__ t}` →
+verbatim (balance-checked), `{:__char__ n}` → char literal. The whole output is
+balance-checked before writing.
 
 ## Test
 Every module is gated by `clj-kondo` (0 errors) and verified byte-exact
-against the Python reference (`~/.local/lib/cljgen/cljgen.py`) on its
-acceptance battery.
+against the Python reference (`cljgen/cljgen.py`) on its acceptance battery.
